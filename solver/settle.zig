@@ -11,6 +11,8 @@
 //!     in 4 rounds (one per popcount level of the low nibble).
 //! Subset sums are only stored per block (lane 0); the 16 lanes are
 //! reconstructed as base + a constant vector of low-nibble sums.
+//! After a call, `dpPtr()[m]` holds dp[m] for every mask m (block layout is
+//! just m = block * 16 + lane), which JS walks to recover the groups.
 
 const V16u8 = @Vector(16, u8);
 const V16i32 = @Vector(16, i32);
@@ -24,6 +26,11 @@ var heap_cap: usize = 0;
 /// JS writes player nets (in cents) here before calling `minPayments`.
 export fn netsPtr() [*]i32 {
     return &nets;
+}
+
+/// dp table from the last `minPayments` call (2^max(n, 4) bytes).
+export fn dpPtr() [*]u8 {
+    return @ptrFromInt(heap_start);
 }
 
 fn ensureHeap(bytes: usize) bool {

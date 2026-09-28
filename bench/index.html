@@ -86,7 +86,7 @@
 <body>
 <main>
   <h1>⚡ Settle Up Benchmark</h1>
-  <p class="sub">Same fewest-payments math, three engines. Random table, dollars in $5 steps. <a href="../">← Back to the app</a></p>
+  <p class="sub">Same fewest-payments math, two engines. Random table, dollars in $5 steps. <a href="../">← Back to the app</a></p>
 
   <section class="card">
     <div class="controls">
@@ -104,22 +104,21 @@
 
   <section class="card note">
     <p>The math: fewest payments = players − the most groups that can settle among themselves. Finding that means checking every subset of players, 2ⁿ of them (16.7 million at 24 players).</p>
-    <p><b>JavaScript</b> is the exact code the app uses. <b>Zig → WASM</b> is a 1.5 KB module that processes 16 subsets at a time with SIMD. <b>WebGPU</b> runs one GPU thread per subset, one layer of subset size at a time.</p>
+    <p><b>JavaScript</b> is the app's original solver, kept here for comparison. <b>Zig → WASM</b> is the 1.5 KB module the app now uses; it processes 16 subsets at a time with SIMD.</p>
     <p>A normal home game (≤10 players) takes microseconds on any of them.</p>
   </section>
 </main>
 
 <script>
 (() => {
-  // Built from settle.zig by build.mjs — do not edit by hand.
-  const WASM_B64 = "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";
+  // Built from solver/settle.zig by solver/build.mjs — do not edit by hand.
+  const WASM_B64 = "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";
 
   const $ = (id) => document.getElementById(id);
 
   const ENGINES = [
-    { id: "js", name: "JavaScript", desc: "Plain loops over typed arrays (the app's code)" },
-    { id: "wasm", name: "Zig → WASM + SIMD", desc: "Freestanding Zig, 16 subsets per vector" },
-    { id: "gpu", name: "WebGPU", desc: "One GPU thread per subset" },
+    { id: "js", name: "JavaScript", desc: "Plain loops over typed arrays (the original solver)" },
+    { id: "wasm", name: "Zig → WASM + SIMD", desc: "Freestanding Zig, 16 subsets per vector (the app's solver)" },
   ];
 
   // ---------- JavaScript: identical to the app ----------
@@ -152,99 +151,6 @@
     const r = wasm.minPayments(nets.length);
     if (r < 0) throw new Error("WASM out of memory");
     return r;
-  }
-
-  // ---------- WebGPU ----------
-  const WGSL = /* wgsl */ `
-    struct P { n: u32, k: u32, stride: u32, pad: u32 }
-    @group(0) @binding(0) var<storage, read_write> dp: array<u32>;
-    @group(0) @binding(1) var<storage, read> lowT: array<i32>;
-    @group(0) @binding(2) var<storage, read> highT: array<i32>;
-    @group(0) @binding(3) var<uniform> p: P;
-
-    // One pass per subset size k: every subset of size k reads only
-    // subsets of size k-1, which the previous pass finished.
-    @compute @workgroup_size(256)
-    fn main(@builtin(global_invocation_id) g: vec3u) {
-      let m = g.x + g.y * p.stride;
-      if (m >= (1u << p.n) || countOneBits(m) != p.k) { return; }
-      var best = 0u;
-      var r = m;
-      while (r != 0u) {
-        let b = r & (0u - r);
-        best = max(best, dp[m ^ b]);
-        r = r ^ b;
-      }
-      let s = lowT[m & 4095u] + highT[m >> 12u];
-      dp[m] = best + select(0u, 1u, s == 0);
-    }`;
-
-  let gpu = null;
-  async function initGpu() {
-    if (!navigator.gpu) throw new Error("WebGPU isn't supported in this browser");
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) throw new Error("No WebGPU adapter available");
-    const device = await adapter.requestDevice();
-    const module = device.createShaderModule({ code: WGSL });
-    const pipeline = await device.createComputePipelineAsync({
-      layout: "auto",
-      compute: { module, entryPoint: "main" },
-    });
-    return { device, pipeline };
-  }
-
-  async function gpuMinPayments(nets) {
-    const { device, pipeline } = gpu;
-    const n = nets.length, N = 2 ** n;
-    const bufs = [];
-    const buffer = (size, usage, data) => {
-      const b = device.createBuffer({ size, usage, mappedAtCreation: !!data });
-      if (data) { new data.constructor(b.getMappedRange()).set(data); b.unmap(); }
-      bufs.push(b);
-      return b;
-    };
-
-    // Subset sums split into low 12 bits + high bits: sum(m) = lowT[m & 4095] + highT[m >> 12]
-    const lowT = new Int32Array(4096);
-    for (let x = 1; x < 4096; x++) {
-      const j = 31 - Math.clz32(x & -x);
-      lowT[x] = lowT[x & (x - 1)] + (j < n ? nets[j] : 0);
-    }
-    const highT = new Int32Array(Math.max(1, 2 ** Math.max(0, n - 12)));
-    for (let y = 1; y < highT.length; y++) {
-      const j = 31 - Math.clz32(y & -y);
-      highT[y] = highT[y & (y - 1)] + nets[12 + j];
-    }
-
-    const S = GPUBufferUsage;
-    const dp = buffer(N * 4, S.STORAGE | S.COPY_SRC);
-    const lowB = buffer(lowT.byteLength, S.STORAGE, lowT);
-    const highB = buffer(highT.byteLength, S.STORAGE, highT);
-    const read = buffer(4, S.MAP_READ | S.COPY_DST);
-
-    const groups = Math.ceil(N / 256);
-    const gx = Math.min(groups, 65535), gy = Math.ceil(groups / gx);
-
-    const enc = device.createCommandEncoder();
-    const pass = enc.beginComputePass();
-    pass.setPipeline(pipeline);
-    for (let k = 1; k <= n; k++) {
-      const uni = buffer(16, S.UNIFORM, new Uint32Array([n, k, gx * 256, 0]));
-      pass.setBindGroup(0, device.createBindGroup({
-        layout: pipeline.getBindGroupLayout(0),
-        entries: [dp, lowB, highB, uni].map((b, i) => ({ binding: i, resource: { buffer: b } })),
-      }));
-      pass.dispatchWorkgroups(gx, gy);
-    }
-    pass.end();
-    enc.copyBufferToBuffer(dp, (N - 1) * 4, read, 0, 4);
-    device.queue.submit([enc.finish()]);
-
-    await read.mapAsync(GPUMapMode.READ);
-    const groupsFound = new Uint32Array(read.getMappedRange())[0];
-    read.unmap();
-    bufs.forEach((b) => b.destroy());
-    return n - groupsFound;
   }
 
   // ---------- Harness ----------
@@ -340,7 +246,6 @@
     const runners = {
       js: async () => jsMinPayments,
       wasm: async () => { wasm = wasm || await initWasm(); return wasmMinPayments; },
-      gpu: async () => { gpu = gpu || await initGpu(); return gpuMinPayments; },
     };
 
     for (const r of res) {
@@ -359,7 +264,7 @@
     btn.disabled = false;
   });
 
-  if (!WASM_B64) $("status").textContent = "WASM not built yet — run node build.mjs";
+  if (!WASM_B64) $("status").textContent = "WASM not built yet — run node solver/build.mjs";
 })();
 </script>
 </body>

@@ -225,43 +225,54 @@
 
   // ---------- Settlement algorithm ----------
   // The minimum number of payments = (#non-zero players) − (max number of
-  // disjoint zero-sum groups they can be split into). Found exactly via
-  // bitmask DP for up to 18 non-zero players, greedy beyond that.
+  // disjoint zero-sum groups they can be split into). The subset DP runs in
+  // the Zig WASM solver (solver/settle.zig) for up to 24 non-zero players;
+  // beyond that, or if WASM can't load, we fall back to plain greedy.
+  // Built from solver/settle.zig by solver/build.mjs — do not edit by hand.
+  const WASM_B64 = "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";
+  const MAX_EXACT = 24;
+  let solver = null;
+  try {
+    const bytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
+    solver = new WebAssembly.Instance(new WebAssembly.Module(bytes)).exports;
+  } catch (e) {
+    console.warn("WASM solver unavailable, using greedy settle-up", e);
+  }
+
   function settle(list) {
     const people = list.filter((p) => p.net !== 0);
     const n = people.length;
     if (!n) return [];
-    let groups;
-    if (n <= 18) {
-      const N = 1 << n;
-      const sum = new Int32Array(N), dp = new Int8Array(N);
-      for (let m = 1; m < N; m++) {
-        const low = 31 - Math.clz32(m & -m);
-        sum[m] = sum[m & (m - 1)] + people[low].net;
-        let best = 0;
-        for (let i = 0; i < n; i++) if (m & (1 << i)) {
-          const v = dp[m ^ (1 << i)];
-          if (v > best) best = v;
-        }
-        dp[m] = best + (sum[m] === 0 ? 1 : 0);
-      }
-      // Reconstruct: peel elements off, a group closes whenever the mask sum is 0.
-      groups = [];
-      let m = N - 1, cur = [];
-      while (m) {
-        if (sum[m] === 0 && cur.length) { groups.push(cur); cur = []; }
-        const z = sum[m] === 0 ? 1 : 0;
-        for (let i = 0; i < n; i++) if ((m & (1 << i)) && dp[m ^ (1 << i)] + z === dp[m]) {
-          cur.push(people[i]); m ^= 1 << i; break;
-        }
-      }
-      if (cur.length) groups.push(cur);
-    } else {
-      groups = [people];
-    }
+    const groups = (solver && n <= MAX_EXACT && exactGroups(people)) || [people];
     const pays = [];
     for (const g of groups) pays.push(...greedy(g));
     return pays.sort((a, b) => b.amount - a.amount);
+  }
+
+  // Splits balanced players into the most zero-sum groups using the WASM dp table.
+  function exactGroups(people) {
+    // memory.buffer changes when the module grows its heap, so re-view each call
+    new Int32Array(solver.memory.buffer, solver.netsPtr(), people.length).set(people.map((p) => p.net));
+    if (solver.minPayments(people.length) < 0) return null;
+    // The solver pads to 4 players with zero nets; mirror that here.
+    const all = people.concat(Array.from({ length: Math.max(0, 4 - people.length) }, () => ({ name: "", net: 0 })));
+    const n = all.length;
+    const dp = new Uint8Array(solver.memory.buffer, solver.dpPtr(), 1 << n);
+    // Peel players off the full set; a group closes whenever the remaining sum hits 0.
+    const groups = [];
+    let m = (1 << n) - 1, sum = 0, cur = [];
+    while (m) {
+      if (sum === 0 && cur.length) { groups.push(cur); cur = []; }
+      const z = sum === 0 ? 1 : 0;
+      for (let i = 0; i < n; i++) if ((m & (1 << i)) && dp[m ^ (1 << i)] + z === dp[m]) {
+        if (all[i].net) cur.push(all[i]);
+        m ^= 1 << i;
+        sum -= all[i].net;
+        break;
+      }
+    }
+    if (cur.length) groups.push(cur);
+    return groups.filter((g) => g.length);
   }
 
   // Largest debtor pays largest creditor until everyone is square.
