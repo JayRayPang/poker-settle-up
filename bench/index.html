@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f5132">
+<title>Settle Up Benchmark</title>
+<style>
+  :root {
+    --bg: #f4f6f5;
+    --card: #ffffff;
+    --text: #17201b;
+    --muted: #65706a;
+    --border: #d9dfdc;
+    --accent: #0f7a4a;
+    --accent-text: #ffffff;
+    --bar: #0f7a4a;
+    --bad: #c0392b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1411;
+      --card: #18201b;
+      --text: #e8eeea;
+      --muted: #9aa69f;
+      --border: #2c3731;
+      --accent: #2fb673;
+      --accent-text: #06140c;
+      --bar: #2fb673;
+      --bad: #ff7b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+  .sub { color: var(--muted); font-size: .9rem; margin: 0 0 16px; }
+  a { color: var(--accent); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 14px;
+  }
+  .controls { display: flex; gap: 8px; align-items: center; }
+  label { font-size: .9rem; color: var(--muted); }
+  select, button { font: inherit; border-radius: 10px; }
+  select {
+    padding: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+  }
+  button {
+    border: 0;
+    padding: 12px 14px;
+    background: var(--accent);
+    color: var(--accent-text);
+    font-weight: 600;
+    flex: 1;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  .status { color: var(--muted); font-size: .85rem; margin-top: 8px; min-height: 1.2em; }
+  .eng { padding: 10px 2px; border-bottom: 1px solid var(--border); }
+  .eng:last-child { border-bottom: 0; }
+  .eng-top { display: flex; justify-content: space-between; gap: 8px; }
+  .eng-name { font-weight: 600; }
+  .eng-desc { color: var(--muted); font-size: .8rem; }
+  .eng-time { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+  .eng-x { color: var(--muted); font-size: .8rem; font-weight: 400; }
+  .track { height: 6px; border-radius: 3px; background: var(--border); margin-top: 8px; overflow: hidden; }
+  .fill { height: 100%; background: var(--bar); width: 0; border-radius: 3px; transition: width .4s; }
+  .err { color: var(--bad); font-size: .85rem; }
+  .note { color: var(--muted); font-size: .85rem; }
+  .note p { margin: 0 0 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>⚡ Settle Up Benchmark</h1>
+  <p class="sub">Same fewest-payments math, three engines. Random table, dollars in $5 steps. <a href="../">← Back to the app</a></p>
+
+  <section class="card">
+    <div class="controls">
+      <label for="n">Players</label>
+      <select id="n">
+        <option>8</option><option>12</option><option>16</option><option>18</option>
+        <option selected>20</option><option>22</option><option>24</option>
+      </select>
+      <button id="run">Run benchmark</button>
+    </div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section class="card" id="results"></section>
+
+  <section class="card note">
+    <p>The math: fewest payments = players − the most groups that can settle among themselves. Finding that means checking every subset of players, 2ⁿ of them (16.7 million at 24 players).</p>
+    <p><b>JavaScript</b> is the exact code the app uses. <b>Zig → WASM</b> is a 1.5 KB module that processes 16 subsets at a time with SIMD. <b>WebGPU</b> runs one GPU thread per subset, one layer of subset size at a time.</p>
+    <p>A normal home game (≤10 players) takes microseconds on any of them.</p>
+  </section>
+</main>
+
+<script>
+(() => {
+  // Built from settle.zig by build.mjs — do not edit by hand.
+  const WASM_B64 = "AGFzbQEAAAABCgJgAX8Bf2AAAX8DAwIAAQQFAXABAQEFAwEAEQYJAX8BQYCAwAALByIDBm1lbW9yeQIAC21pblBheW1lbnRzAAAHbmV0c1B0cgABCs0LAsELAgh/CHsjgICAgABBwABrIgEkgICAgAACQAJAIABBHEsNACAAQQJ0QYSAwIAAaiECIABBBCAAQQRLGyIDIABrIQACQANAIABFDQEgAkEANgIAIAJBBGohAiAAQX9qIQAMAAsLQRQgA0EcaiICdCEEAkACQEEAKAKAgMCAACIFRQ0AQQAoAoSBwIAAIQAMAQtBAD8AQRB0IgA2AoSBwIAAQQAgADYCgIDAgAAgACEFCwJAIAUgBGoiBCAATQ0AIAQgAGtB//8DaiIEQRB2QABBAEgNAUEAIARBgIB8cSAAajYChIHAgAALQRAgAnQhBiACQR9xIQdBACEIAkADQCAIQRBGDQFBACEAQYSAwIAAIQJBACEEA0ACQAJAIABBBEYNACAIIAB2QQFxRQ0BIAIoAgAgBGohBAwBCyABIAhBAnRqIAQ2AgAgCEEBaiEIDAILIAJBBGohAiAAQQFqIQAMAAsLCyAFIAZqIghBADYCACAB/QAEMCEJIAH9AAQgIQogAf0ABBAhCyAB/QAEACEMQQAhAgNAAkACQAJAIAIgB3YNACACDQEgCCgCACEEDAILIAMgCEF/ai0AAGshAAwECyAIIAJBAnRqIAJoQQJ0KAKUgMCAACAIIAJBf2ogAnFBAnRqKAIAaiIENgIAC/0MAAAAAAAAAAAAAAAAAAAAACENIAIhAAJAA0AgAEUNASANIAUgAEEAIABrcSACc0EEdGr9AAAA/XkhDSAAQX9qIABxIQAMAAsLIAUgAkEEdGogDSANIA0gDSANIA0gDSANIA0gDEEAIARr/REiDv03/Qz/AAAA/wAAAP8AAAD/AAAAIg/9TiALIA79NyAP/U79hgEgCiAO/TcgD/1OIAkgDv03IA/9Tv2GAf1m/QwBAQEBAQEBAQEBAQEBAQEB/U4iDiAOQQD9FwAgAhsiDv1uIg8gDf0NAQADAgUEBwYJCAsKDQwPDv15/Q0AEQITBBUGFwgZChsMHQ4fIhAgECAPIA39DQIDAAEGBwQFCgsICQ4PDA39ef0NAAESEwQFFhcICRobDA0eHyIQIBAgDyAN/Q0EBQYHAAECAwwNDg8ICQoL/Xn9DQABAgMUFRYXCAkKCxwdHh8iECAQIA8gDf0NCAkKCwwNDg8AAQIDBAUGB/15/Q0AAQIDBAUGBxgZGhscHR4fIA79biIPIA39DQEAAwIFBAcGCQgLCg0MDw79ef0NABECEwQVBhcIGQobDB0OHyIQIBAgDyAN/Q0CAwABBgcEBQoLCAkODwwN/Xn9DQABEhMEBRYXCAkaGwwNHh8iECAQIA8gDf0NBAUGBwABAgMMDQ4PCAkKC/15/Q0AAQIDFBUWFwgJCgscHR4fIhAgECAPIA39DQgJCgsMDQ4PAAECAwQFBgf9ef0NAAECAwQFBgcYGRobHB0eHyAO/W4iDyAN/Q0BAAMCBQQHBgkICwoNDA8O/Xn9DQARAhMEFQYXCBkKGwwdDh8iECAQIA8gDf0NAgMAAQYHBAUKCwgJDg8MDf15/Q0AARITBAUWFwgJGhsMDR4fIhAgECAPIA39DQQFBgcAAQIDDA0ODwgJCgv9ef0NAAECAxQVFhcICQoLHB0eHyIQIBAgDyAN/Q0ICQoLDA0ODwABAgMEBQYH/Xn9DQABAgMEBQYHGBkaGxwdHh8gDv1uIg8gDf0NAQADAgUEBwYJCAsKDQwPDv15/Q0AEQITBBUGFwgZChsMHQ4fIg0gDSAPIA39DQIDAAEGBwQFCgsICQ4PDA39ef0NAAESEwQFFhcICRobDA0eHyINIA0gDyAN/Q0EBQYHAAECAwwNDg8ICQoL/Xn9DQABAgMUFRYXCAkKCxwdHh8iDSANIA8gDf0NCAkKCwwNDg8AAQIDBAUGB/15/Q0AAQIDBAUGBxgZGhscHR4fIA79bv0LAAAgAkEBaiECDAALC0F/IQALIAFBwABqJICAgIAAIAALCABBhIDAgAAL";
+
+  const $ = (id) => document.getElementById(id);
+
+  const ENGINES = [
+    { id: "js", name: "JavaScript", desc: "Plain loops over typed arrays (the app's code)" },
+    { id: "wasm", name: "Zig → WASM + SIMD", desc: "Freestanding Zig, 16 subsets per vector" },
+    { id: "gpu", name: "WebGPU", desc: "One GPU thread per subset" },
+  ];
+
+  // ---------- JavaScript: identical to the app ----------
+  function jsMinPayments(nets) {
+    const n = nets.length, N = 1 << n;
+    const sum = new Int32Array(N), dp = new Int8Array(N);
+    for (let m = 1; m < N; m++) {
+      const low = 31 - Math.clz32(m & -m);
+      sum[m] = sum[m & (m - 1)] + nets[low];
+      let best = 0;
+      for (let i = 0; i < n; i++) if (m & (1 << i)) {
+        const v = dp[m ^ (1 << i)];
+        if (v > best) best = v;
+      }
+      dp[m] = best + (sum[m] === 0 ? 1 : 0);
+    }
+    return n - dp[N - 1];
+  }
+
+  // ---------- Zig → WASM ----------
+  let wasm = null;
+  async function initWasm() {
+    const bytes = Uint8Array.from(atob(WASM_B64), (c) => c.charCodeAt(0));
+    const { instance } = await WebAssembly.instantiate(bytes);
+    return instance.exports;
+  }
+  function wasmMinPayments(nets) {
+    // memory.buffer changes when the module grows its heap, so re-view each call
+    new Int32Array(wasm.memory.buffer, wasm.netsPtr(), nets.length).set(nets);
+    const r = wasm.minPayments(nets.length);
+    if (r < 0) throw new Error("WASM out of memory");
+    return r;
+  }
+
+  // ---------- WebGPU ----------
+  const WGSL = /* wgsl */ `
+    struct P { n: u32, k: u32, stride: u32, pad: u32 }
+    @group(0) @binding(0) var<storage, read_write> dp: array<u32>;
+    @group(0) @binding(1) var<storage, read> lowT: array<i32>;
+    @group(0) @binding(2) var<storage, read> highT: array<i32>;
+    @group(0) @binding(3) var<uniform> p: P;
+
+    // One pass per subset size k: every subset of size k reads only
+    // subsets of size k-1, which the previous pass finished.
+    @compute @workgroup_size(256)
+    fn main(@builtin(global_invocation_id) g: vec3u) {
+      let m = g.x + g.y * p.stride;
+      if (m >= (1u << p.n) || countOneBits(m) != p.k) { return; }
+      var best = 0u;
+      var r = m;
+      while (r != 0u) {
+        let b = r & (0u - r);
+        best = max(best, dp[m ^ b]);
+        r = r ^ b;
+      }
+      let s = lowT[m & 4095u] + highT[m >> 12u];
+      dp[m] = best + select(0u, 1u, s == 0);
+    }`;
+
+  let gpu = null;
+  async function initGpu() {
+    if (!navigator.gpu) throw new Error("WebGPU isn't supported in this browser");
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) throw new Error("No WebGPU adapter available");
+    const device = await adapter.requestDevice();
+    const module = device.createShaderModule({ code: WGSL });
+    const pipeline = await device.createComputePipelineAsync({
+      layout: "auto",
+      compute: { module, entryPoint: "main" },
+    });
+    return { device, pipeline };
+  }
+
+  async function gpuMinPayments(nets) {
+    const { device, pipeline } = gpu;
+    const n = nets.length, N = 2 ** n;
+    const bufs = [];
+    const buffer = (size, usage, data) => {
+      const b = device.createBuffer({ size, usage, mappedAtCreation: !!data });
+      if (data) { new data.constructor(b.getMappedRange()).set(data); b.unmap(); }
+      bufs.push(b);
+      return b;
+    };
+
+    // Subset sums split into low 12 bits + high bits: sum(m) = lowT[m & 4095] + highT[m >> 12]
+    const lowT = new Int32Array(4096);
+    for (let x = 1; x < 4096; x++) {
+      const j = 31 - Math.clz32(x & -x);
+      lowT[x] = lowT[x & (x - 1)] + (j < n ? nets[j] : 0);
+    }
+    const highT = new Int32Array(Math.max(1, 2 ** Math.max(0, n - 12)));
+    for (let y = 1; y < highT.length; y++) {
+      const j = 31 - Math.clz32(y & -y);
+      highT[y] = highT[y & (y - 1)] + nets[12 + j];
+    }
+
+    const S = GPUBufferUsage;
+    const dp = buffer(N * 4, S.STORAGE | S.COPY_SRC);
+    const lowB = buffer(lowT.byteLength, S.STORAGE, lowT);
+    const highB = buffer(highT.byteLength, S.STORAGE, highT);
+    const read = buffer(4, S.MAP_READ | S.COPY_DST);
+
+    const groups = Math.ceil(N / 256);
+    const gx = Math.min(groups, 65535), gy = Math.ceil(groups / gx);
+
+    const enc = device.createCommandEncoder();
+    const pass = enc.beginComputePass();
+    pass.setPipeline(pipeline);
+    for (let k = 1; k <= n; k++) {
+      const uni = buffer(16, S.UNIFORM, new Uint32Array([n, k, gx * 256, 0]));
+      pass.setBindGroup(0, device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [dp, lowB, highB, uni].map((b, i) => ({ binding: i, resource: { buffer: b } })),
+      }));
+      pass.dispatchWorkgroups(gx, gy);
+    }
+    pass.end();
+    enc.copyBufferToBuffer(dp, (N - 1) * 4, read, 0, 4);
+    device.queue.submit([enc.finish()]);
+
+    await read.mapAsync(GPUMapMode.READ);
+    const groupsFound = new Uint32Array(read.getMappedRange())[0];
+    read.unmap();
+    bufs.forEach((b) => b.destroy());
+    return n - groupsFound;
+  }
+
+  // ---------- Harness ----------
+  function randomNets(n) {
+    const a = [];
+    let s = 0;
+    for (let i = 0; i < n - 1; i++) {
+      let v = 0;
+      while (!v) v = (Math.floor(Math.random() * 41) - 20) * 500; // ±$100 in $5 steps
+      a.push(v);
+      s += v;
+    }
+    a.push(-s);
+    return a;
+  }
+
+  // Repeat until ~250 ms have elapsed so tiny timings aren't lost to timer resolution.
+  async function measure(fn, nets) {
+    let answer = await fn(nets); // warm-up
+    let iters = 0;
+    const t0 = performance.now();
+    let dt;
+    do {
+      answer = await fn(nets);
+      iters++;
+      dt = performance.now() - t0;
+    } while (dt < 250 && iters < 5000);
+    return { ms: dt / iters, answer };
+  }
+
+  const fmtTime = (ms) =>
+    ms < 1 ? (ms * 1000).toFixed(ms < 0.01 ? 2 : 1) + " µs" :
+    ms < 1000 ? ms.toFixed(ms < 10 ? 2 : 1) + " ms" :
+    (ms / 1000).toFixed(2) + " s";
+
+  function renderResults(res) {
+    const box = $("results");
+    box.innerHTML = "";
+    const ok = res.filter((r) => r.ms != null);
+    const fastest = Math.min(...ok.map((r) => r.ms));
+    const js = res.find((r) => r.id === "js");
+    const answers = new Set(ok.map((r) => r.answer));
+    for (const r of res) {
+      const eng = ENGINES.find((e) => e.id === r.id);
+      const el = document.createElement("div");
+      el.className = "eng";
+      el.innerHTML = `
+        <div class="eng-top">
+          <div><div class="eng-name"></div><div class="eng-desc"></div></div>
+          <div class="eng-time"></div>
+        </div>
+        <div class="track"><div class="fill"></div></div>`;
+      el.querySelector(".eng-name").textContent = eng.name;
+      el.querySelector(".eng-desc").textContent = eng.desc;
+      const t = el.querySelector(".eng-time");
+      if (r.error) {
+        t.innerHTML = `<span class="err"></span>`;
+        t.firstChild.textContent = r.error;
+        el.querySelector(".track").remove();
+      } else if (r.ms == null) {
+        t.textContent = "…";
+      } else {
+        const x = js && js.ms != null && r.id !== "js" ? js.ms / r.ms : null;
+        t.innerHTML = `${fmtTime(r.ms)}<div class="eng-x">${
+          x ? (x >= 1 ? x.toFixed(x < 10 ? 1 : 0) + "× faster" : (1 / x).toFixed(1) + "× slower") + " than JS" : "baseline"
+        } · ${r.answer} payments</div>`;
+        // bar length = relative speed, log scale so a 100× gap is still readable
+        const rel = Math.log10(r.ms / fastest);
+        requestAnimationFrame(() => {
+          el.querySelector(".fill").style.width = Math.max(4, 100 - rel * 33) + "%";
+        });
+      }
+      box.appendChild(el);
+    }
+    if (answers.size > 1) {
+      const warn = document.createElement("div");
+      warn.className = "err";
+      warn.textContent = "Engines disagree on the answer!";
+      box.appendChild(warn);
+    }
+  }
+
+  const frame = () => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+
+  $("run").addEventListener("click", async () => {
+    const btn = $("run");
+    btn.disabled = true;
+    const n = +$("n").value;
+    const nets = randomNets(n);
+    const res = ENGINES.map((e) => ({ id: e.id }));
+    renderResults(res);
+
+    const runners = {
+      js: async () => jsMinPayments,
+      wasm: async () => { wasm = wasm || await initWasm(); return wasmMinPayments; },
+      gpu: async () => { gpu = gpu || await initGpu(); return gpuMinPayments; },
+    };
+
+    for (const r of res) {
+      const eng = ENGINES.find((e) => e.id === r.id);
+      $("status").textContent = `Running ${eng.name} with ${n} players (${(2 ** n).toLocaleString()} subsets)…`;
+      await frame();
+      try {
+        const fn = await runners[r.id]();
+        Object.assign(r, await measure(fn, nets));
+      } catch (e) {
+        r.error = e.message || String(e);
+      }
+      renderResults(res);
+    }
+    $("status").textContent = `Done: ${n} players, ${(2 ** n).toLocaleString()} subsets.`;
+    btn.disabled = false;
+  });
+
+  if (!WASM_B64) $("status").textContent = "WASM not built yet — run node build.mjs";
+})();
+</script>
+</body>
+</html>
