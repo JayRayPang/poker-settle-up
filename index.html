@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Settle Up">
+<meta name="theme-color" content="#0f5132">
+<title>Poker Settle Up</title>
+<style>
+  :root {
+    --bg: #f4f6f5;
+    --card: #ffffff;
+    --text: #17201b;
+    --muted: #65706a;
+    --border: #d9dfdc;
+    --accent: #0f7a4a;
+    --accent-text: #ffffff;
+    --win: #0f7a4a;
+    --loss: #c0392b;
+    --warn-bg: #fff4e0;
+    --warn-text: #7a4b00;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1411;
+      --card: #18201b;
+      --text: #e8eeea;
+      --muted: #9aa69f;
+      --border: #2c3731;
+      --accent: #2fb673;
+      --accent-text: #06140c;
+      --win: #4cd08d;
+      --loss: #ff7b6b;
+      --warn-bg: #3a2c12;
+      --warn-text: #ffd48a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.4rem; margin: 8px 0 4px; }
+  .sub { color: var(--muted); font-size: .9rem; margin: 0 0 16px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 14px;
+  }
+  .head, .row {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr 1fr 36px;
+    gap: 8px;
+    align-items: center;
+  }
+  .head { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 0 2px 6px; }
+  .row { margin-bottom: 8px; }
+  .row .net { grid-column: 1 / -1; font-size: .8rem; margin: -4px 2px 4px; color: var(--muted); }
+  input {
+    width: 100%;
+    min-width: 0;
+    font-size: 16px; /* prevents iOS zoom */
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg);
+    color: var(--text);
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button {
+    font: inherit;
+    border: 0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    cursor: pointer;
+  }
+  .del { background: transparent; color: var(--muted); font-size: 1.3rem; padding: 4px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .primary { background: var(--accent); color: var(--accent-text); font-weight: 600; flex: 1; }
+  .secondary { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .totals { display: flex; justify-content: space-between; font-size: .9rem; color: var(--muted); margin-top: 6px; }
+  .warn { background: var(--warn-bg); color: var(--warn-text); border-radius: 10px; padding: 10px 12px; font-size: .9rem; margin-top: 10px; }
+  .pos { color: var(--win); }
+  .neg { color: var(--loss); }
+  #results h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  .pay {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 4px; border-bottom: 1px solid var(--border); gap: 8px;
+  }
+  .pay:last-of-type { border-bottom: 0; }
+  .pay .who { font-weight: 600; }
+  .pay .arrow { color: var(--muted); font-weight: 400; margin: 0 6px; }
+  .pay .amt { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hint { color: var(--muted); font-size: .8rem; margin-top: 8px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>♠ Poker Settle Up</h1>
+  <p class="sub">Enter buy-ins and final chip/cash counts. Tip: type rebuys like <b>20+20+40</b>.</p>
+
+  <section class="card">
+    <div class="head"><span>Player</span><span>Buy-in $</span><span>Cash-out $</span><span></span></div>
+    <div id="players"></div>
+    <div class="btns">
+      <button class="secondary" id="add">+ Add player</button>
+      <button class="secondary" id="reset">New game</button>
+    </div>
+    <div class="totals"><span id="totIn">In: $0.00</span><span id="totOut">Out: $0.00</span></div>
+    <div id="warn" class="warn hidden"></div>
+  </section>
+
+  <section class="card hidden" id="results">
+    <h2 id="resTitle">Payments</h2>
+    <div id="payments"></div>
+    <div class="btns" style="margin-top:12px">
+      <button class="primary" id="copy">Copy for group chat</button>
+    </div>
+    <div class="hint" id="resHint"></div>
+  </section>
+</main>
+
+<script>
+(() => {
+  const STORE = "poker-settle-up-v1";
+  const $ = (id) => document.getElementById(id);
+  let players = load();
+
+  function load() {
+    try {
+      const p = JSON.parse(localStorage.getItem(STORE));
+      if (Array.isArray(p) && p.length) return p;
+    } catch (e) {}
+    return [blank(), blank(), blank()];
+  }
+  function save() {
+    try { localStorage.setItem(STORE, JSON.stringify(players)); } catch (e) {}
+  }
+  function blank() { return { name: "", buyIn: "", cashOut: "" }; }
+
+  // Parses "20+20+40" or "100" into integer cents; null if invalid, 0 if empty.
+  function cents(str) {
+    const s = String(str).replace(/[$,\s]/g, "");
+    if (!s) return 0;
+    if (!/^[+-]?\d*\.?\d+([+-]\d*\.?\d+)*$/.test(s)) return null;
+    return (s.match(/[+-]?\d*\.?\d+/g) || []).reduce((t, n) => t + Math.round(parseFloat(n) * 100), 0);
+  }
+  const fmt = (c) => (c < 0 ? "-" : "") + "$" + (Math.abs(c) / 100).toFixed(2);
+
+  function render() {
+    const wrap = $("players");
+    wrap.innerHTML = "";
+    players.forEach((p, i) => {
+      const row = document.createElement("div");
+      row.className = "row";
+      row.innerHTML = `
+        <input placeholder="Name" autocomplete="off" data-k="name" value="">
+        <input placeholder="0" inputmode="decimal" data-k="buyIn" value="">
+        <input placeholder="0" inputmode="decimal" data-k="cashOut" value="">
+        <button class="del" aria-label="Remove player">×</button>
+        <div class="net"></div>`;
+      row.querySelectorAll("input").forEach((inp) => {
+        inp.value = p[inp.dataset.k];
+        inp.addEventListener("input", () => { p[inp.dataset.k] = inp.value; save(); compute(); });
+      });
+      row.querySelector(".del").addEventListener("click", () => {
+        players.splice(i, 1);
+        if (!players.length) players.push(blank());
+        save(); render();
+      });
+      wrap.appendChild(row);
+    });
+    compute();
+  }
+
+  function compute() {
+    const rows = [...$("players").children];
+    let totIn = 0, totOut = 0, bad = [];
+    const active = [];
+    players.forEach((p, i) => {
+      const b = cents(p.buyIn), c = cents(p.cashOut);
+      const netEl = rows[i] && rows[i].querySelector(".net");
+      if (b === null || c === null) {
+        bad.push(p.name || `Player ${i + 1}`);
+        if (netEl) netEl.textContent = "Invalid amount";
+        return;
+      }
+      totIn += b; totOut += c;
+      const net = c - b;
+      if (netEl) {
+        netEl.textContent = (b || c) ? `Net: ${net > 0 ? "+" : ""}${fmt(net)}` : "";
+        netEl.className = "net " + (net > 0 ? "pos" : net < 0 ? "neg" : "");
+      }
+      if (b || c) active.push({ name: p.name.trim() || `Player ${i + 1}`, net });
+    });
+    $("totIn").textContent = "In: " + fmt(totIn);
+    $("totOut").textContent = "Out: " + fmt(totOut);
+
+    const warn = $("warn");
+    const diff = totOut - totIn;
+    let msg = "";
+    if (bad.length) msg = `Fix invalid amount for: ${bad.join(", ")}.`;
+    else if (diff !== 0 && active.length)
+      msg = `Cash-outs are ${fmt(Math.abs(diff))} ${diff > 0 ? "more" : "less"} than buy-ins. Recount chips before settling.`;
+    warn.textContent = msg;
+    warn.classList.toggle("hidden", !msg);
+
+    const res = $("results");
+    if (msg || active.length < 2) { res.classList.add("hidden"); return; }
+    const pays = settle(active);
+    res.classList.remove("hidden");
+    showPayments(pays, active);
+  }
+
+  // ---------- Settlement algorithm ----------
+  // The minimum number of payments = (#non-zero players) − (max number of
+  // disjoint zero-sum groups they can be split into). Found exactly via
+  // bitmask DP for up to 18 non-zero players, greedy beyond that.
+  function settle(list) {
+    const people = list.filter((p) => p.net !== 0);
+    const n = people.length;
+    if (!n) return [];
+    let groups;
+    if (n <= 18) {
+      const N = 1 << n;
+      const sum = new Int32Array(N), dp = new Int8Array(N);
+      for (let m = 1; m < N; m++) {
+        const low = 31 - Math.clz32(m & -m);
+        sum[m] = sum[m & (m - 1)] + people[low].net;
+        let best = 0;
+        for (let i = 0; i < n; i++) if (m & (1 << i)) {
+          const v = dp[m ^ (1 << i)];
+          if (v > best) best = v;
+        }
+        dp[m] = best + (sum[m] === 0 ? 1 : 0);
+      }
+      // Reconstruct: peel elements off, a group closes whenever the mask sum is 0.
+      groups = [];
+      let m = N - 1, cur = [];
+      while (m) {
+        if (sum[m] === 0 && cur.length) { groups.push(cur); cur = []; }
+        const z = sum[m] === 0 ? 1 : 0;
+        for (let i = 0; i < n; i++) if ((m & (1 << i)) && dp[m ^ (1 << i)] + z === dp[m]) {
+          cur.push(people[i]); m ^= 1 << i; break;
+        }
+      }
+      if (cur.length) groups.push(cur);
+    } else {
+      groups = [people];
+    }
+    const pays = [];
+    for (const g of groups) pays.push(...greedy(g));
+    return pays.sort((a, b) => b.amount - a.amount);
+  }
+
+  // Largest debtor pays largest creditor until everyone is square.
+  function greedy(group) {
+    const cred = group.filter((p) => p.net > 0).map((p) => ({ ...p }));
+    const debt = group.filter((p) => p.net < 0).map((p) => ({ name: p.name, net: -p.net }));
+    const out = [];
+    while (cred.length && debt.length) {
+      cred.sort((a, b) => b.net - a.net);
+      debt.sort((a, b) => b.net - a.net);
+      const c = cred[0], d = debt[0];
+      const amt = Math.min(c.net, d.net);
+      out.push({ from: d.name, to: c.name, amount: amt });
+      c.net -= amt; d.net -= amt;
+      if (!c.net) cred.shift();
+      if (!d.net) debt.shift();
+    }
+    return out;
+  }
+
+  // ---------- Output ----------
+  let lastText = "";
+  function showPayments(pays, active) {
+    const box = $("payments");
+    box.innerHTML = "";
+    if (!pays.length) {
+      box.innerHTML = `<div class="pay">Everyone broke even — no payments needed.</div>`;
+    }
+    pays.forEach((p) => {
+      const el = document.createElement("div");
+      el.className = "pay";
+      el.innerHTML = `<span><span class="who"></span><span class="arrow">pays →</span><span class="who"></span></span><span class="amt"></span>`;
+      const w = el.querySelectorAll(".who");
+      w[0].textContent = p.from; w[1].textContent = p.to;
+      el.querySelector(".amt").textContent = fmt(p.amount);
+      box.appendChild(el);
+    });
+    $("resTitle").textContent = `Payments (${pays.length})`;
+    $("resHint").textContent = pays.length
+      ? `Fewest possible payments. Venmo, Cash App or Zelle all work.`
+      : "";
+
+    const date = new Date().toLocaleDateString();
+    const nets = [...active].sort((a, b) => b.net - a.net)
+      .map((p) => `${p.name}: ${p.net > 0 ? "+" : ""}${fmt(p.net)}`).join("\n");
+    lastText = `Poker ${date}\n\nResults:\n${nets}\n\nSettle up:\n` +
+      (pays.length ? pays.map((p) => `${p.from} → ${p.to}: ${fmt(p.amount)}`).join("\n") : "Nobody owes anything");
+  }
+
+  $("copy").addEventListener("click", async () => {
+    const btn = $("copy");
+    try {
+      if (navigator.share && /Mobi|Android|iPhone/i.test(navigator.userAgent)) {
+        await navigator.share({ text: lastText });
+        return;
+      }
+      await navigator.clipboard.writeText(lastText);
+      btn.textContent = "Copied!";
+    } catch (e) {
+      if (e && e.name === "AbortError") return;
+      prompt("Copy this:", lastText);
+    }
+    setTimeout(() => (btn.textContent = "Copy for group chat"), 1500);
+  });
+
+  $("add").addEventListener("click", () => {
+    players.push(blank()); save(); render();
+    const inputs = $("players").querySelectorAll('input[data-k="name"]');
+    inputs[inputs.length - 1].focus();
+  });
+
+  $("reset").addEventListener("click", () => {
+    if (!confirm("Clear amounts for a new game? (Player names are kept.)")) return;
+    players = players.map((p) => ({ name: p.name, buyIn: "", cashOut: "" }));
+    save(); render();
+  });
+
+  window.__settle = settle; // exposed for testing
+  render();
+})();
+</script>
+</body>
+</html>
